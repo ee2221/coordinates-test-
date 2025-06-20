@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import * as THREE from 'three';
 
-type EditMode = 'vertex' | 'edge' | 'face' | 'normal' | null;
+type EditMode = 'vertex' | 'edge' | null;
 
 interface SceneState {
   objects: Array<{
@@ -80,7 +80,26 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         : state.selectedObject,
     })),
 
-  setSelectedObject: (object) => set({ selectedObject: object }),
+  setSelectedObject: (object) => 
+    set((state) => {
+      // Auto-enable vertex mode for sphere, cylinder, and cone
+      let newEditMode = state.editMode;
+      if (object instanceof THREE.Mesh) {
+        const geometry = object.geometry;
+        if (geometry instanceof THREE.SphereGeometry ||
+            geometry instanceof THREE.CylinderGeometry ||
+            geometry instanceof THREE.ConeGeometry) {
+          newEditMode = 'vertex';
+        }
+      }
+      
+      return { 
+        selectedObject: object,
+        editMode: newEditMode,
+        transformMode: null // Clear transform mode when selecting object
+      };
+    }),
+
   setTransformMode: (mode) => set({ transformMode: mode }),
   
   setEditMode: (mode) => 
