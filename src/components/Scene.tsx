@@ -82,6 +82,84 @@ const VertexCoordinates = ({ position, onPositionChange }) => {
   );
 };
 
+const EdgeCoordinates = ({ position, onPositionChange }) => {
+  const [localPosition, setLocalPosition] = useState({ x: 0, y: 0, z: 0 });
+
+  useEffect(() => {
+    if (position) {
+      setLocalPosition({
+        x: parseFloat(position.x.toFixed(3)),
+        y: parseFloat(position.y.toFixed(3)),
+        z: parseFloat(position.z.toFixed(3))
+      });
+    }
+  }, [position]);
+
+  if (!position) return null;
+
+  const handleChange = (axis: 'x' | 'y' | 'z', value: string) => {
+    const numValue = parseFloat(value) || 0;
+    const newLocalPosition = { ...localPosition, [axis]: numValue };
+    setLocalPosition(newLocalPosition);
+    
+    const newPosition = new THREE.Vector3(
+      newLocalPosition.x,
+      newLocalPosition.y,
+      newLocalPosition.z
+    );
+    onPositionChange(newPosition);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent, axis: 'x' | 'y' | 'z') => {
+    if (e.key === 'Enter') {
+      e.currentTarget.blur();
+    }
+  };
+
+  return (
+    <div className="absolute right-4 bottom-4 bg-black/90 text-white p-4 rounded-lg font-mono border border-white/20">
+      <div className="mb-2">
+        <h3 className="text-sm font-medium text-white/70">Edge Midpoint</h3>
+      </div>
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <label className="w-8 text-sm font-medium">X:</label>
+          <input
+            type="number"
+            value={localPosition.x}
+            onChange={(e) => handleChange('x', e.target.value)}
+            onKeyDown={(e) => handleKeyDown(e, 'x')}
+            className="bg-gray-800 px-2 py-1 rounded w-24 text-right text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-gray-700"
+            step="0.1"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="w-8 text-sm font-medium">Y:</label>
+          <input
+            type="number"
+            value={localPosition.y}
+            onChange={(e) => handleChange('y', e.target.value)}
+            onKeyDown={(e) => handleKeyDown(e, 'y')}
+            className="bg-gray-800 px-2 py-1 rounded w-24 text-right text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-gray-700"
+            step="0.1"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="w-8 text-sm font-medium">Z:</label>
+          <input
+            type="number"
+            value={localPosition.z}
+            onChange={(e) => handleChange('z', e.target.value)}
+            onKeyDown={(e) => handleKeyDown(e, 'z')}
+            className="bg-gray-800 px-2 py-1 rounded w-24 text-right text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-gray-700"
+            step="0.1"
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const VertexCountSelector = () => {
   const { selectedObject, updateCylinderVertices, updateSphereVertices } = useSceneStore();
 
@@ -415,8 +493,20 @@ const EditModeOverlay = () => {
 };
 
 const Scene: React.FC = () => {
-  const { objects, selectedObject, setSelectedObject, transformMode, editMode, draggedVertex, selectedElements, updateVertexDrag } = useSceneStore();
+  const { 
+    objects, 
+    selectedObject, 
+    setSelectedObject, 
+    transformMode, 
+    editMode, 
+    draggedVertex, 
+    draggedEdge,
+    selectedElements, 
+    updateVertexDrag,
+    updateEdgeDrag 
+  } = useSceneStore();
   const [selectedPosition, setSelectedPosition] = useState<THREE.Vector3 | null>(null);
+  const [selectedEdgePosition, setSelectedEdgePosition] = useState<THREE.Vector3 | null>(null);
 
   useEffect(() => {
     if (editMode === 'vertex' && selectedObject instanceof THREE.Mesh) {
@@ -441,7 +531,19 @@ const Scene: React.FC = () => {
     }
   }, [editMode, selectedObject, draggedVertex, selectedElements.vertices]);
 
-  const handlePositionChange = (newPosition: THREE.Vector3) => {
+  useEffect(() => {
+    if (editMode === 'edge' && selectedObject instanceof THREE.Mesh) {
+      if (draggedEdge) {
+        setSelectedEdgePosition(draggedEdge.midpoint);
+      } else {
+        setSelectedEdgePosition(null);
+      }
+    } else {
+      setSelectedEdgePosition(null);
+    }
+  }, [editMode, selectedObject, draggedEdge]);
+
+  const handleVertexPositionChange = (newPosition: THREE.Vector3) => {
     if (selectedObject instanceof THREE.Mesh && draggedVertex) {
       // Convert world position back to local position
       const localPosition = newPosition.clone();
@@ -452,6 +554,13 @@ const Scene: React.FC = () => {
       
       // Update the displayed position to match the world position
       setSelectedPosition(newPosition);
+    }
+  };
+
+  const handleEdgePositionChange = (newPosition: THREE.Vector3) => {
+    if (selectedObject instanceof THREE.Mesh && draggedEdge) {
+      updateEdgeDrag(newPosition);
+      setSelectedEdgePosition(newPosition);
     }
   };
 
@@ -499,7 +608,13 @@ const Scene: React.FC = () => {
       {editMode === 'vertex' && selectedPosition && (
         <VertexCoordinates 
           position={selectedPosition}
-          onPositionChange={handlePositionChange}
+          onPositionChange={handleVertexPositionChange}
+        />
+      )}
+      {editMode === 'edge' && selectedEdgePosition && (
+        <EdgeCoordinates 
+          position={selectedEdgePosition}
+          onPositionChange={handleEdgePositionChange}
         />
       )}
       {editMode === 'vertex' && selectedObject && !(selectedObject.geometry instanceof THREE.ConeGeometry) && (
