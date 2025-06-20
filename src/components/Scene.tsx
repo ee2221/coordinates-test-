@@ -415,7 +415,7 @@ const EditModeOverlay = () => {
 };
 
 const Scene: React.FC = () => {
-  const { objects, selectedObject, setSelectedObject, transformMode, editMode, draggedVertex, selectedElements, updateVertexDrag } = useSceneStore();
+  const { objects, selectedObject, setSelectedObject, transformMode, editMode, draggedVertex, selectedElements, updateVertexPosition } = useSceneStore();
   const [selectedPosition, setSelectedPosition] = useState<THREE.Vector3 | null>(null);
 
   useEffect(() => {
@@ -443,12 +443,8 @@ const Scene: React.FC = () => {
 
   const handlePositionChange = (newPosition: THREE.Vector3) => {
     if (selectedObject instanceof THREE.Mesh && draggedVertex) {
-      // Convert world position back to local position
-      const localPosition = newPosition.clone();
-      const inverseMatrix = selectedObject.matrixWorld.clone().invert();
-      localPosition.applyMatrix4(inverseMatrix);
-      
-      updateVertexDrag(localPosition);
+      // Use the new updateVertexPosition method that handles coordinate conversion properly
+      updateVertexPosition(newPosition);
       
       // Update the displayed position to match the world position
       setSelectedPosition(newPosition);

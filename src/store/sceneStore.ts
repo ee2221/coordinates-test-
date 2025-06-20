@@ -51,6 +51,7 @@ interface SceneState {
   setIsDraggingEdge: (isDragging: boolean) => void;
   updateCylinderVertices: (vertexCount: number) => void;
   updateSphereVertices: (vertexCount: number) => void;
+  updateVertexPosition: (worldPosition: THREE.Vector3) => void;
 }
 
 export const useSceneStore = create<SceneState>((set, get) => ({
@@ -238,6 +239,39 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     }),
 
   endVertexDrag: () => set({ draggedVertex: null }),
+
+  updateVertexPosition: (worldPosition) =>
+    set((state) => {
+      if (!state.draggedVertex || !(state.selectedObject instanceof THREE.Mesh)) return state;
+
+      const geometry = state.selectedObject.geometry;
+      const positions = geometry.attributes.position;
+      
+      // Convert world position to local position
+      const localPosition = worldPosition.clone();
+      const inverseMatrix = state.selectedObject.matrixWorld.clone().invert();
+      localPosition.applyMatrix4(inverseMatrix);
+      
+      // Update all overlapping vertices to the new local position
+      state.draggedVertex.indices.forEach(index => {
+        positions.setXYZ(
+          index,
+          localPosition.x,
+          localPosition.y,
+          localPosition.z
+        );
+      });
+
+      positions.needsUpdate = true;
+      geometry.computeVertexNormals();
+      
+      return {
+        draggedVertex: {
+          ...state.draggedVertex,
+          position: worldPosition.clone()
+        }
+      };
+    }),
 
   startEdgeDrag: (vertexIndices, positions, midpoint) =>
     set((state) => {
