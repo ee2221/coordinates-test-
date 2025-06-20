@@ -441,17 +441,32 @@ const Scene: React.FC = () => {
     }
   }, [editMode, selectedObject, draggedVertex, selectedElements.vertices]);
 
-  const handlePositionChange = (newPosition: THREE.Vector3) => {
+  const handlePositionChange = (newWorldPosition: THREE.Vector3) => {
     if (selectedObject instanceof THREE.Mesh && draggedVertex) {
-      // Convert world position back to local position
-      const localPosition = newPosition.clone();
+      // Convert world position to local position for geometry update
+      const localPosition = newWorldPosition.clone();
       const inverseMatrix = selectedObject.matrixWorld.clone().invert();
       localPosition.applyMatrix4(inverseMatrix);
       
-      updateVertexDrag(localPosition);
+      // Update the geometry with local coordinates
+      const geometry = selectedObject.geometry;
+      const positions = geometry.attributes.position;
       
-      // Update the displayed position to match the world position
-      setSelectedPosition(newPosition);
+      draggedVertex.indices.forEach(index => {
+        positions.setXYZ(index, localPosition.x, localPosition.y, localPosition.z);
+      });
+      
+      positions.needsUpdate = true;
+      geometry.computeVertexNormals();
+      
+      // Update the dragged vertex state with world position for display
+      useSceneStore.getState().draggedVertex = {
+        ...draggedVertex,
+        position: newWorldPosition.clone()
+      };
+      
+      // Update the displayed position
+      setSelectedPosition(newWorldPosition);
     }
   };
 
