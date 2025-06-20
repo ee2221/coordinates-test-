@@ -216,6 +216,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       const geometry = state.selectedObject.geometry;
       const positions = geometry.attributes.position;
       
+      // Update all overlapping vertices to the new position
       state.draggedVertex.indices.forEach(index => {
         positions.setXYZ(
           index,

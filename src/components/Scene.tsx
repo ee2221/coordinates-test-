@@ -5,44 +5,75 @@ import { useSceneStore } from '../store/sceneStore';
 import * as THREE from 'three';
 
 const VertexCoordinates = ({ position, onPositionChange }) => {
+  const [localPosition, setLocalPosition] = useState({ x: 0, y: 0, z: 0 });
+
+  useEffect(() => {
+    if (position) {
+      setLocalPosition({
+        x: parseFloat(position.x.toFixed(3)),
+        y: parseFloat(position.y.toFixed(3)),
+        z: parseFloat(position.z.toFixed(3))
+      });
+    }
+  }, [position]);
+
   if (!position) return null;
 
   const handleChange = (axis: 'x' | 'y' | 'z', value: string) => {
-    const newPosition = position.clone();
-    newPosition[axis] = parseFloat(value) || 0;
+    const numValue = parseFloat(value) || 0;
+    const newLocalPosition = { ...localPosition, [axis]: numValue };
+    setLocalPosition(newLocalPosition);
+    
+    const newPosition = new THREE.Vector3(
+      newLocalPosition.x,
+      newLocalPosition.y,
+      newLocalPosition.z
+    );
     onPositionChange(newPosition);
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent, axis: 'x' | 'y' | 'z') => {
+    if (e.key === 'Enter') {
+      e.currentTarget.blur();
+    }
+  };
+
   return (
-    <div className="absolute right-4 bottom-4 bg-black/75 text-white p-4 rounded-lg font-mono">
+    <div className="absolute right-4 bottom-4 bg-black/90 text-white p-4 rounded-lg font-mono border border-white/20">
+      <div className="mb-2">
+        <h3 className="text-sm font-medium text-white/70">Vertex Position</h3>
+      </div>
       <div className="space-y-2">
         <div className="flex items-center gap-2">
-          <label className="w-8">X:</label>
+          <label className="w-8 text-sm font-medium">X:</label>
           <input
             type="number"
-            value={position.x.toFixed(3)}
+            value={localPosition.x}
             onChange={(e) => handleChange('x', e.target.value)}
-            className="bg-gray-800 px-2 py-1 rounded w-24 text-right"
+            onKeyDown={(e) => handleKeyDown(e, 'x')}
+            className="bg-gray-800 px-2 py-1 rounded w-24 text-right text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-gray-700"
             step="0.1"
           />
         </div>
         <div className="flex items-center gap-2">
-          <label className="w-8">Y:</label>
+          <label className="w-8 text-sm font-medium">Y:</label>
           <input
             type="number"
-            value={position.y.toFixed(3)}
+            value={localPosition.y}
             onChange={(e) => handleChange('y', e.target.value)}
-            className="bg-gray-800 px-2 py-1 rounded w-24 text-right"
+            onKeyDown={(e) => handleKeyDown(e, 'y')}
+            className="bg-gray-800 px-2 py-1 rounded w-24 text-right text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-gray-700"
             step="0.1"
           />
         </div>
         <div className="flex items-center gap-2">
-          <label className="w-8">Z:</label>
+          <label className="w-8 text-sm font-medium">Z:</label>
           <input
             type="number"
-            value={position.z.toFixed(3)}
+            value={localPosition.z}
             onChange={(e) => handleChange('z', e.target.value)}
-            className="bg-gray-800 px-2 py-1 rounded w-24 text-right"
+            onKeyDown={(e) => handleKeyDown(e, 'z')}
+            className="bg-gray-800 px-2 py-1 rounded w-24 text-right text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-gray-700"
             step="0.1"
           />
         </div>
@@ -411,8 +442,16 @@ const Scene: React.FC = () => {
   }, [editMode, selectedObject, draggedVertex, selectedElements.vertices]);
 
   const handlePositionChange = (newPosition: THREE.Vector3) => {
-    if (selectedObject instanceof THREE.Mesh) {
-      updateVertexDrag(newPosition);
+    if (selectedObject instanceof THREE.Mesh && draggedVertex) {
+      // Convert world position back to local position
+      const localPosition = newPosition.clone();
+      const inverseMatrix = selectedObject.matrixWorld.clone().invert();
+      localPosition.applyMatrix4(inverseMatrix);
+      
+      updateVertexDrag(localPosition);
+      
+      // Update the displayed position to match the world position
+      setSelectedPosition(newPosition);
     }
   };
 
