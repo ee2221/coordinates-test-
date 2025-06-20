@@ -82,7 +82,20 @@ export const useSceneStore = create<SceneState>((set, get) => ({
 
   setSelectedObject: (object) => set({ selectedObject: object }),
   setTransformMode: (mode) => set({ transformMode: mode }),
-  setEditMode: (mode) => set({ editMode: mode }),
+  
+  setEditMode: (mode) => 
+    set((state) => {
+      // If trying to set edge mode on unsupported geometry, prevent it
+      if (mode === 'edge' && state.selectedObject instanceof THREE.Mesh) {
+        const geometry = state.selectedObject.geometry;
+        if (geometry instanceof THREE.CylinderGeometry ||
+            geometry instanceof THREE.ConeGeometry ||
+            geometry instanceof THREE.SphereGeometry) {
+          return state; // Don't change the edit mode
+        }
+      }
+      return { editMode: mode };
+    }),
 
   toggleVisibility: (id) =>
     set((state) => {
