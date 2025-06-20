@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import * as THREE from 'three';
 
 type EditMode = 'vertex' | 'edge' | null;
+type CameraPerspective = 'perspective' | 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom';
 
 interface Group {
   id: string;
@@ -25,6 +26,7 @@ interface SceneState {
   selectedObject: THREE.Object3D | null;
   transformMode: 'translate' | 'rotate' | 'scale' | null;
   editMode: EditMode;
+  cameraPerspective: CameraPerspective;
   selectedElements: {
     vertices: number[];
     edges: number[];
@@ -48,6 +50,7 @@ interface SceneState {
   setSelectedObject: (object: THREE.Object3D | null) => void;
   setTransformMode: (mode: 'translate' | 'rotate' | 'scale' | null) => void;
   setEditMode: (mode: EditMode) => void;
+  setCameraPerspective: (perspective: CameraPerspective) => void;
   toggleVisibility: (id: string) => void;
   toggleLock: (id: string) => void;
   updateObjectName: (id: string, name: string) => void;
@@ -85,6 +88,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   selectedObject: null,
   transformMode: null,
   editMode: null,
+  cameraPerspective: 'perspective',
   selectedElements: {
     vertices: [],
     edges: [],
@@ -166,6 +170,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       }
       return { editMode: mode };
     }),
+
+  setCameraPerspective: (perspective) => set({ cameraPerspective: perspective }),
 
   toggleVisibility: (id) =>
     set((state) => {

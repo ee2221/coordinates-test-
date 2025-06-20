@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Canvas, useThree } from '@react-three/fiber';
+import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls, TransformControls, Grid } from '@react-three/drei';
 import { useSceneStore } from '../store/sceneStore';
 import * as THREE from 'three';
@@ -520,6 +520,123 @@ const EditModeOverlay = () => {
   );
 };
 
+// Camera controller component
+const CameraController = () => {
+  const { camera } = useThree();
+  const { cameraPerspective } = useSceneStore();
+  const controlsRef = useRef();
+
+  useEffect(() => {
+    if (!camera || !controlsRef.current) return;
+
+    const controls = controlsRef.current;
+    const distance = 10; // Distance from origin
+
+    switch (cameraPerspective) {
+      case 'front':
+        camera.position.set(0, 0, distance);
+        camera.lookAt(0, 0, 0);
+        camera.up.set(0, 1, 0);
+        if (camera instanceof THREE.PerspectiveCamera) {
+          // Switch to orthographic for technical views
+          const orthoCamera = new THREE.OrthographicCamera(
+            -distance, distance, distance, -distance, 0.1, 1000
+          );
+          orthoCamera.position.copy(camera.position);
+          orthoCamera.lookAt(0, 0, 0);
+        }
+        break;
+      case 'back':
+        camera.position.set(0, 0, -distance);
+        camera.lookAt(0, 0, 0);
+        camera.up.set(0, 1, 0);
+        break;
+      case 'right':
+        camera.position.set(distance, 0, 0);
+        camera.lookAt(0, 0, 0);
+        camera.up.set(0, 1, 0);
+        break;
+      case 'left':
+        camera.position.set(-distance, 0, 0);
+        camera.lookAt(0, 0, 0);
+        camera.up.set(0, 1, 0);
+        break;
+      case 'top':
+        camera.position.set(0, distance, 0);
+        camera.lookAt(0, 0, 0);
+        camera.up.set(0, 0, -1);
+        break;
+      case 'bottom':
+        camera.position.set(0, -distance, 0);
+        camera.lookAt(0, 0, 0);
+        camera.up.set(0, 0, 1);
+        break;
+      case 'perspective':
+      default:
+        camera.position.set(5, 5, 5);
+        camera.lookAt(0, 0, 0);
+        camera.up.set(0, 1, 0);
+        break;
+    }
+
+    // Update controls target and position
+    if (controls.target) {
+      controls.target.set(0, 0, 0);
+    }
+    controls.update();
+  }, [cameraPerspective, camera]);
+
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      // Only handle numpad keys when not typing in inputs
+      if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') return;
+
+      const { setCameraPerspective } = useSceneStore.getState();
+
+      switch (event.code) {
+        case 'Numpad0':
+          setCameraPerspective('perspective');
+          break;
+        case 'Numpad1':
+          if (event.ctrlKey) {
+            setCameraPerspective('back');
+          } else {
+            setCameraPerspective('front');
+          }
+          break;
+        case 'Numpad3':
+          if (event.ctrlKey) {
+            setCameraPerspective('left');
+          } else {
+            setCameraPerspective('right');
+          }
+          break;
+        case 'Numpad7':
+          if (event.ctrlKey) {
+            setCameraPerspective('bottom');
+          } else {
+            setCameraPerspective('top');
+          }
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  return (
+    <OrbitControls
+      ref={controlsRef}
+      makeDefault
+      enablePan={true}
+      enableZoom={true}
+      enableRotate={cameraPerspective === 'perspective'}
+    />
+  );
+};
+
 const Scene: React.FC = () => {
   const { 
     objects, 
@@ -634,7 +751,7 @@ const Scene: React.FC = () => {
         )}
 
         <EditModeOverlay />
-        <OrbitControls makeDefault />
+        <CameraController />
       </Canvas>
       {editMode === 'vertex' && selectedPosition && (
         <VertexCoordinates 

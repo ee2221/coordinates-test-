@@ -4,6 +4,7 @@ import Toolbar from './components/Toolbar';
 import LayersPanel from './components/LayersPanel';
 import ObjectProperties from './components/ObjectProperties';
 import EditControls from './components/EditControls';
+import CameraPerspectivePanel from './components/CameraPerspectivePanel';
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
       <LayersPanel />
       <ObjectProperties />
       <EditControls />
+      <CameraPerspectivePanel />
     </div>
   );
 }
