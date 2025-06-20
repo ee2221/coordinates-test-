@@ -161,9 +161,15 @@ const EdgeCoordinates = ({ position, onPositionChange }) => {
 };
 
 const VertexCountSelector = () => {
-  const { selectedObject, updateCylinderVertices, updateSphereVertices } = useSceneStore();
+  const { selectedObject, updateCylinderVertices, updateSphereVertices, isObjectLocked } = useSceneStore();
 
   if (!(selectedObject instanceof THREE.Mesh)) {
+    return null;
+  }
+
+  // Check if object is locked
+  const selectedObj = useSceneStore.getState().objects.find(obj => obj.object === selectedObject);
+  if (selectedObj && isObjectLocked(selectedObj.id)) {
     return null;
   }
 
@@ -216,10 +222,14 @@ const VertexCountSelector = () => {
 };
 
 const VertexPoints = ({ geometry, object }) => {
-  const { editMode, selectedElements, startVertexDrag } = useSceneStore();
+  const { editMode, selectedElements, startVertexDrag, isObjectLocked } = useSceneStore();
   const positions = geometry.attributes.position;
   const vertices = [];
   const worldMatrix = object.matrixWorld;
+  
+  // Check if object is locked
+  const selectedObj = useSceneStore.getState().objects.find(obj => obj.object === object);
+  const objectLocked = selectedObj ? isObjectLocked(selectedObj.id) : false;
   
   for (let i = 0; i < positions.count; i++) {
     const vertex = new THREE.Vector3(
@@ -238,16 +248,16 @@ const VertexPoints = ({ geometry, object }) => {
           position={vertex}
           onClick={(e) => {
             e.stopPropagation();
-            if (editMode === 'vertex') {
+            if (editMode === 'vertex' && !objectLocked) {
               startVertexDrag(i, vertex);
             }
           }}
         >
           <sphereGeometry args={[0.05]} />
           <meshBasicMaterial
-            color={selectedElements.vertices.includes(i) ? 'red' : 'yellow'}
+            color={objectLocked ? 'gray' : (selectedElements.vertices.includes(i) ? 'red' : 'yellow')}
             transparent
-            opacity={0.5}
+            opacity={objectLocked ? 0.3 : 0.5}
           />
         </mesh>
       ))}
@@ -263,7 +273,8 @@ const EdgeLines = ({ geometry, object }) => {
     isDraggingEdge, 
     setIsDraggingEdge, 
     endEdgeDrag,
-    selectedElements 
+    selectedElements,
+    isObjectLocked
   } = useSceneStore();
   const { camera, raycaster, pointer } = useThree();
   const positions = geometry.attributes.position;
@@ -271,6 +282,10 @@ const EdgeLines = ({ geometry, object }) => {
   const worldMatrix = object.matrixWorld;
   const plane = useRef(new THREE.Plane());
   const intersection = useRef(new THREE.Vector3());
+
+  // Check if object is locked
+  const selectedObj = useSceneStore.getState().objects.find(obj => obj.object === object);
+  const objectLocked = selectedObj ? isObjectLocked(selectedObj.id) : false;
 
   // Get all edges including vertical ones
   const indices = geometry.index ? Array.from(geometry.index.array) : null;
@@ -338,7 +353,7 @@ const EdgeLines = ({ geometry, object }) => {
   }
 
   useEffect(() => {
-    if (!isDraggingEdge || !draggedEdge) return;
+    if (!isDraggingEdge || !draggedEdge || objectLocked) return;
 
     const handlePointerMove = (event) => {
       // Set up a plane perpendicular to camera for dragging
@@ -369,14 +384,16 @@ const EdgeLines = ({ geometry, object }) => {
       window.removeEventListener('contextmenu', handleRightClick);
       window.removeEventListener('mousedown', handleRightClick);
     };
-  }, [isDraggingEdge, draggedEdge, camera, raycaster, pointer, setIsDraggingEdge, endEdgeDrag]);
+  }, [isDraggingEdge, draggedEdge, camera, raycaster, pointer, setIsDraggingEdge, endEdgeDrag, objectLocked]);
 
   const handleEdgeClick = (vertices: [number, number], positions: [THREE.Vector3, THREE.Vector3], midpoint: THREE.Vector3) => {
+    if (objectLocked) return;
     // Single click to select and show coordinates
     startEdgeDrag(vertices, positions, midpoint);
   };
 
   const handleEdgeDoubleClick = (vertices: [number, number], positions: [THREE.Vector3, THREE.Vector3], midpoint: THREE.Vector3) => {
+    if (objectLocked) return;
     // Double click to start dragging
     if (!isDraggingEdge) {
       setIsDraggingEdge(true);
@@ -397,8 +414,10 @@ const EdgeLines = ({ geometry, object }) => {
           <group key={i}>
             <line geometry={geometry}>
               <lineBasicMaterial
-                color={isSelected ? 'red' : 'yellow'}
+                color={objectLocked ? 'gray' : (isSelected ? 'red' : 'yellow')}
                 linewidth={isSelected ? 3 : 2}
+                transparent={objectLocked}
+                opacity={objectLocked ? 0.3 : 1}
               />
             </line>
             <mesh
@@ -414,9 +433,9 @@ const EdgeLines = ({ geometry, object }) => {
             >
               <sphereGeometry args={[0.08]} />
               <meshBasicMaterial
-                color={isSelected ? 'red' : 'yellow'}
+                color={objectLocked ? 'gray' : (isSelected ? 'red' : 'yellow')}
                 transparent
-                opacity={isSelected ? 0.9 : 0.7}
+                opacity={objectLocked ? 0.3 : (isSelected ? 0.9 : 0.7)}
               />
             </mesh>
           </group>
@@ -433,7 +452,8 @@ const EditModeOverlay = () => {
     setSelectedElements,
     draggedVertex,
     updateVertexDrag,
-    endVertexDrag
+    endVertexDrag,
+    isObjectLocked
   } = useSceneStore();
   const { scene, camera, raycaster, pointer } = useThree();
   const plane = useRef(new THREE.Plane());
@@ -441,6 +461,11 @@ const EditModeOverlay = () => {
 
   useEffect(() => {
     if (!selectedObject || !editMode || !(selectedObject instanceof THREE.Mesh)) return;
+
+    // Check if object is locked
+    const selectedObj = useSceneStore.getState().objects.find(obj => obj.object === selectedObject);
+    const objectLocked = selectedObj ? isObjectLocked(selectedObj.id) : false;
+    if (objectLocked) return;
 
     const handlePointerMove = (event) => {
       if (draggedVertex) {
@@ -481,7 +506,8 @@ const EditModeOverlay = () => {
     setSelectedElements,
     draggedVertex,
     updateVertexDrag,
-    endVertexDrag
+    endVertexDrag,
+    isObjectLocked
   ]);
 
   if (!selectedObject || !editMode || !(selectedObject instanceof THREE.Mesh)) return null;
@@ -505,7 +531,8 @@ const Scene: React.FC = () => {
     draggedEdge,
     selectedElements, 
     updateVertexDrag,
-    updateEdgeDrag 
+    updateEdgeDrag,
+    canSelectObject
   } = useSceneStore();
   const [selectedPosition, setSelectedPosition] = useState<THREE.Vector3 | null>(null);
   const [selectedEdgePosition, setSelectedEdgePosition] = useState<THREE.Vector3 | null>(null);
@@ -591,13 +618,15 @@ const Scene: React.FC = () => {
               object={object}
               onClick={(e) => {
                 e.stopPropagation();
-                setSelectedObject(object);
+                if (canSelectObject(object)) {
+                  setSelectedObject(object);
+                }
               }}
             />
           )
         ))}
 
-        {selectedObject && transformMode && (
+        {selectedObject && transformMode && canSelectObject(selectedObject) && (
           <TransformControls
             object={selectedObject}
             mode={transformMode}

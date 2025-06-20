@@ -10,7 +10,9 @@ import {
   FolderOpen,
   Plus,
   Users,
-  FolderPlus
+  FolderPlus,
+  Lock,
+  Unlock
 } from 'lucide-react';
 import { useSceneStore } from '../store/sceneStore';
 
@@ -19,15 +21,18 @@ const LayersPanel: React.FC = () => {
     objects, 
     groups,
     removeObject, 
-    toggleVisibility, 
+    toggleVisibility,
+    toggleLock,
     updateObjectName,
     createGroup,
     removeGroup,
     toggleGroupExpanded,
     toggleGroupVisibility,
+    toggleGroupLock,
     updateGroupName,
     moveObjectsToGroup,
-    removeObjectFromGroup
+    removeObjectFromGroup,
+    isObjectLocked
   } = useSceneStore();
   
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -37,6 +42,13 @@ const LayersPanel: React.FC = () => {
   const [showGroupOptions, setShowGroupOptions] = useState(false);
 
   const startEditing = (id: string, name: string, type: 'object' | 'group') => {
+    // Check if item is locked before allowing edit
+    if (type === 'object' && isObjectLocked(id)) return;
+    if (type === 'group') {
+      const group = groups.find(g => g.id === id);
+      if (group?.locked) return;
+    }
+
     setEditingId(id);
     setEditingName(name);
     setEditingType(type);
@@ -69,6 +81,10 @@ const LayersPanel: React.FC = () => {
 
   const createGroupFromSelected = () => {
     if (selectedObjects.length > 0) {
+      // Check if any selected objects are locked
+      const hasLockedObjects = selectedObjects.some(id => isObjectLocked(id));
+      if (hasLockedObjects) return;
+
       createGroup(`Group ${groups.length + 1}`, selectedObjects);
       setSelectedObjects([]);
       setShowGroupOptions(false);
@@ -119,10 +135,14 @@ const LayersPanel: React.FC = () => {
                         <button
                           key={group.id}
                           onClick={() => moveSelectedToGroup(group.id)}
-                          className="w-full px-3 py-2 text-left text-sm text-white/90 hover:bg-white/5 flex items-center gap-2"
+                          disabled={group.locked}
+                          className={`w-full px-3 py-2 text-left text-sm hover:bg-white/5 flex items-center gap-2 ${
+                            group.locked ? 'text-white/30 cursor-not-allowed' : 'text-white/90'
+                          }`}
                         >
                           <Folder className="w-4 h-4" />
                           {group.name}
+                          {group.locked && <Lock className="w-3 h-3 ml-auto" />}
                         </button>
                       ))}
                       <button
@@ -152,7 +172,9 @@ const LayersPanel: React.FC = () => {
         {/* Render Groups */}
         {groups.map((group) => (
           <div key={group.id} className="space-y-1">
-            <div className="flex items-center justify-between p-2 hover:bg-white/5 rounded-lg transition-colors text-white/90">
+            <div className={`flex items-center justify-between p-2 hover:bg-white/5 rounded-lg transition-colors ${
+              group.locked ? 'text-white/50' : 'text-white/90'
+            }`}>
               <div className="flex items-center gap-2 flex-1">
                 <button
                   onClick={() => toggleGroupExpanded(group.id)}
@@ -166,9 +188,9 @@ const LayersPanel: React.FC = () => {
                 </button>
                 
                 {group.expanded ? (
-                  <FolderOpen className="w-4 h-4 text-blue-400" />
+                  <FolderOpen className={`w-4 h-4 ${group.locked ? 'text-gray-500' : 'text-blue-400'}`} />
                 ) : (
-                  <Folder className="w-4 h-4 text-blue-400" />
+                  <Folder className={`w-4 h-4 ${group.locked ? 'text-gray-500' : 'text-blue-400'}`} />
                 )}
 
                 {editingId === group.id && editingType === 'group' ? (
@@ -184,20 +206,32 @@ const LayersPanel: React.FC = () => {
                 ) : (
                   <span className="flex-1 text-sm font-medium">{group.name}</span>
                 )}
+
+                {group.locked && <Lock className="w-3 h-3 text-orange-400" />}
               </div>
 
               <div className="flex gap-1">
                 <button
                   onClick={() => editingId !== group.id && startEditing(group.id, group.name, 'group')}
-                  className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
-                  title="Rename Group"
+                  disabled={group.locked}
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    group.locked 
+                      ? 'text-white/30 cursor-not-allowed' 
+                      : 'hover:bg-white/10'
+                  }`}
+                  title={group.locked ? 'Group is locked' : 'Rename Group'}
                 >
                   <Edit2 className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => toggleGroupVisibility(group.id)}
-                  className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
-                  title={group.visible ? 'Hide Group' : 'Show Group'}
+                  disabled={group.locked}
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    group.locked 
+                      ? 'text-white/30 cursor-not-allowed' 
+                      : 'hover:bg-white/10'
+                  }`}
+                  title={group.locked ? 'Group is locked' : (group.visible ? 'Hide Group' : 'Show Group')}
                 >
                   {group.visible ? (
                     <Eye className="w-4 h-4" />
@@ -206,9 +240,25 @@ const LayersPanel: React.FC = () => {
                   )}
                 </button>
                 <button
+                  onClick={() => toggleGroupLock(group.id)}
+                  className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-orange-400 hover:text-orange-300"
+                  title={group.locked ? 'Unlock Group' : 'Lock Group'}
+                >
+                  {group.locked ? (
+                    <Lock className="w-4 h-4" />
+                  ) : (
+                    <Unlock className="w-4 h-4" />
+                  )}
+                </button>
+                <button
                   onClick={() => removeGroup(group.id)}
-                  className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-red-400 hover:text-red-300"
-                  title="Delete Group"
+                  disabled={group.locked}
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    group.locked 
+                      ? 'text-white/30 cursor-not-allowed' 
+                      : 'text-red-400 hover:text-red-300 hover:bg-white/10'
+                  }`}
+                  title={group.locked ? 'Group is locked' : 'Delete Group'}
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -220,110 +270,163 @@ const LayersPanel: React.FC = () => {
               <div className="ml-6 space-y-1">
                 {objects
                   .filter(obj => obj.groupId === group.id)
-                  .map(({ id, name, visible }) => (
-                    <div 
-                      key={id} 
-                      className={`flex items-center justify-between p-2 hover:bg-white/5 rounded-lg transition-colors text-white/90 cursor-pointer ${
-                        selectedObjects.includes(id) ? 'bg-blue-500/20 border border-blue-500/30' : ''
-                      }`}
-                      onClick={(e) => handleObjectSelect(id, e)}
-                    >
-                      {editingId === id && editingType === 'object' ? (
-                        <input
-                          type="text"
-                          value={editingName}
-                          onChange={(e) => setEditingName(e.target.value)}
-                          onBlur={saveEdit}
-                          onKeyDown={(e) => e.key === 'Enter' && saveEdit()}
-                          className="bg-[#2a2a2a] border border-white/10 rounded px-2 py-1 w-32 text-sm focus:outline-none focus:border-blue-500/50"
-                          autoFocus
-                        />
-                      ) : (
-                        <span className="flex-1 text-sm">{name}</span>
-                      )}
-                      <div className="flex gap-1">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            editingId !== id && startEditing(id, name, 'object');
-                          }}
-                          className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
-                          title="Rename"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleVisibility(id);
-                          }}
-                          className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
-                          title={visible ? 'Hide' : 'Show'}
-                        >
-                          {visible ? (
-                            <Eye className="w-4 h-4" />
+                  .map(({ id, name, visible, locked }) => {
+                    const isLocked = locked || group.locked;
+                    return (
+                      <div 
+                        key={id} 
+                        className={`flex items-center justify-between p-2 hover:bg-white/5 rounded-lg transition-colors cursor-pointer ${
+                          selectedObjects.includes(id) ? 'bg-blue-500/20 border border-blue-500/30' : ''
+                        } ${isLocked ? 'text-white/50' : 'text-white/90'}`}
+                        onClick={(e) => handleObjectSelect(id, e)}
+                      >
+                        <div className="flex items-center gap-2 flex-1">
+                          {editingId === id && editingType === 'object' ? (
+                            <input
+                              type="text"
+                              value={editingName}
+                              onChange={(e) => setEditingName(e.target.value)}
+                              onBlur={saveEdit}
+                              onKeyDown={(e) => e.key === 'Enter' && saveEdit()}
+                              className="bg-[#2a2a2a] border border-white/10 rounded px-2 py-1 w-32 text-sm focus:outline-none focus:border-blue-500/50"
+                              autoFocus
+                            />
                           ) : (
-                            <EyeOff className="w-4 h-4" />
+                            <span className="flex-1 text-sm">{name}</span>
                           )}
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeObjectFromGroup(id);
-                          }}
-                          className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-orange-400 hover:text-orange-300"
-                          title="Remove from Group"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeObject(id);
-                          }}
-                          className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-red-400 hover:text-red-300"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                          {isLocked && <Lock className="w-3 h-3 text-orange-400" />}
+                        </div>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              editingId !== id && startEditing(id, name, 'object');
+                            }}
+                            disabled={isLocked}
+                            className={`p-1.5 rounded-lg transition-colors ${
+                              isLocked 
+                                ? 'text-white/30 cursor-not-allowed' 
+                                : 'hover:bg-white/10'
+                            }`}
+                            title={isLocked ? 'Object is locked' : 'Rename'}
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleVisibility(id);
+                            }}
+                            disabled={isLocked}
+                            className={`p-1.5 rounded-lg transition-colors ${
+                              isLocked 
+                                ? 'text-white/30 cursor-not-allowed' 
+                                : 'hover:bg-white/10'
+                            }`}
+                            title={isLocked ? 'Object is locked' : (visible ? 'Hide' : 'Show')}
+                          >
+                            {visible ? (
+                              <Eye className="w-4 h-4" />
+                            ) : (
+                              <EyeOff className="w-4 h-4" />
+                            )}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleLock(id);
+                            }}
+                            disabled={group.locked}
+                            className={`p-1.5 rounded-lg transition-colors text-orange-400 hover:text-orange-300 ${
+                              group.locked 
+                                ? 'text-white/30 cursor-not-allowed' 
+                                : 'hover:bg-white/10'
+                            }`}
+                            title={group.locked ? 'Group is locked' : (locked ? 'Unlock Object' : 'Lock Object')}
+                          >
+                            {locked ? (
+                              <Lock className="w-4 h-4" />
+                            ) : (
+                              <Unlock className="w-4 h-4" />
+                            )}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeObjectFromGroup(id);
+                            }}
+                            disabled={isLocked}
+                            className={`p-1.5 rounded-lg transition-colors ${
+                              isLocked 
+                                ? 'text-white/30 cursor-not-allowed' 
+                                : 'text-orange-400 hover:text-orange-300 hover:bg-white/10'
+                            }`}
+                            title={isLocked ? 'Object is locked' : 'Remove from Group'}
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeObject(id);
+                            }}
+                            disabled={isLocked}
+                            className={`p-1.5 rounded-lg transition-colors ${
+                              isLocked 
+                                ? 'text-white/30 cursor-not-allowed' 
+                                : 'text-red-400 hover:text-red-300 hover:bg-white/10'
+                            }`}
+                            title={isLocked ? 'Object is locked' : 'Delete'}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
               </div>
             )}
           </div>
         ))}
 
         {/* Ungrouped Objects */}
-        {ungroupedObjects.map(({ id, name, visible }) => (
+        {ungroupedObjects.map(({ id, name, visible, locked }) => (
           <div 
             key={id} 
-            className={`flex items-center justify-between p-2 hover:bg-white/5 rounded-lg transition-colors text-white/90 cursor-pointer ${
+            className={`flex items-center justify-between p-2 hover:bg-white/5 rounded-lg transition-colors cursor-pointer ${
               selectedObjects.includes(id) ? 'bg-blue-500/20 border border-blue-500/30' : ''
-            }`}
+            } ${locked ? 'text-white/50' : 'text-white/90'}`}
             onClick={(e) => handleObjectSelect(id, e)}
           >
-            {editingId === id && editingType === 'object' ? (
-              <input
-                type="text"
-                value={editingName}
-                onChange={(e) => setEditingName(e.target.value)}
-                onBlur={saveEdit}
-                onKeyDown={(e) => e.key === 'Enter' && saveEdit()}
-                className="bg-[#2a2a2a] border border-white/10 rounded px-2 py-1 w-32 text-sm focus:outline-none focus:border-blue-500/50"
-                autoFocus
-              />
-            ) : (
-              <span className="flex-1 text-sm">{name}</span>
-            )}
+            <div className="flex items-center gap-2 flex-1">
+              {editingId === id && editingType === 'object' ? (
+                <input
+                  type="text"
+                  value={editingName}
+                  onChange={(e) => setEditingName(e.target.value)}
+                  onBlur={saveEdit}
+                  onKeyDown={(e) => e.key === 'Enter' && saveEdit()}
+                  className="bg-[#2a2a2a] border border-white/10 rounded px-2 py-1 w-32 text-sm focus:outline-none focus:border-blue-500/50"
+                  autoFocus
+                />
+              ) : (
+                <span className="flex-1 text-sm">{name}</span>
+              )}
+              {locked && <Lock className="w-3 h-3 text-orange-400" />}
+            </div>
             <div className="flex gap-1">
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   editingId !== id && startEditing(id, name, 'object');
                 }}
-                className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
-                title="Rename"
+                disabled={locked}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  locked 
+                    ? 'text-white/30 cursor-not-allowed' 
+                    : 'hover:bg-white/10'
+                }`}
+                title={locked ? 'Object is locked' : 'Rename'}
               >
                 <Edit2 className="w-4 h-4" />
               </button>
@@ -332,8 +435,13 @@ const LayersPanel: React.FC = () => {
                   e.stopPropagation();
                   toggleVisibility(id);
                 }}
-                className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
-                title={visible ? 'Hide' : 'Show'}
+                disabled={locked}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  locked 
+                    ? 'text-white/30 cursor-not-allowed' 
+                    : 'hover:bg-white/10'
+                }`}
+                title={locked ? 'Object is locked' : (visible ? 'Hide' : 'Show')}
               >
                 {visible ? (
                   <Eye className="w-4 h-4" />
@@ -344,10 +452,29 @@ const LayersPanel: React.FC = () => {
               <button
                 onClick={(e) => {
                   e.stopPropagation();
+                  toggleLock(id);
+                }}
+                className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-orange-400 hover:text-orange-300"
+                title={locked ? 'Unlock Object' : 'Lock Object'}
+              >
+                {locked ? (
+                  <Lock className="w-4 h-4" />
+                ) : (
+                  <Unlock className="w-4 h-4" />
+                )}
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
                   removeObject(id);
                 }}
-                className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-red-400 hover:text-red-300"
-                title="Delete"
+                disabled={locked}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  locked 
+                    ? 'text-white/30 cursor-not-allowed' 
+                    : 'text-red-400 hover:text-red-300 hover:bg-white/10'
+                }`}
+                title={locked ? 'Object is locked' : 'Delete'}
               >
                 <Trash2 className="w-4 h-4" />
               </button>

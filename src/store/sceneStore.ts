@@ -8,6 +8,7 @@ interface Group {
   name: string;
   expanded: boolean;
   visible: boolean;
+  locked: boolean;
   objectIds: string[];
 }
 
@@ -17,6 +18,7 @@ interface SceneState {
     object: THREE.Object3D;
     name: string;
     visible: boolean;
+    locked: boolean;
     groupId?: string;
   }>;
   groups: Group[];
@@ -47,6 +49,7 @@ interface SceneState {
   setTransformMode: (mode: 'translate' | 'rotate' | 'scale' | null) => void;
   setEditMode: (mode: EditMode) => void;
   toggleVisibility: (id: string) => void;
+  toggleLock: (id: string) => void;
   updateObjectName: (id: string, name: string) => void;
   updateObjectProperties: () => void;
   updateObjectColor: (color: string) => void;
@@ -68,8 +71,12 @@ interface SceneState {
   removeObjectFromGroup: (objectId: string) => void;
   toggleGroupExpanded: (groupId: string) => void;
   toggleGroupVisibility: (groupId: string) => void;
+  toggleGroupLock: (groupId: string) => void;
   updateGroupName: (groupId: string, name: string) => void;
   moveObjectsToGroup: (objectIds: string[], groupId: string | null) => void;
+  // Helper functions
+  isObjectLocked: (objectId: string) => boolean;
+  canSelectObject: (object: THREE.Object3D) => boolean;
 }
 
 export const useSceneStore = create<SceneState>((set, get) => ({
@@ -89,11 +96,21 @@ export const useSceneStore = create<SceneState>((set, get) => ({
 
   addObject: (object, name) =>
     set((state) => ({
-      objects: [...state.objects, { id: crypto.randomUUID(), object, name, visible: true }],
+      objects: [...state.objects, { id: crypto.randomUUID(), object, name, visible: true, locked: false }],
     })),
 
   removeObject: (id) =>
     set((state) => {
+      // Check if object is locked
+      const objectToRemove = state.objects.find(obj => obj.id === id);
+      if (objectToRemove?.locked) return state;
+
+      // Check if object is in a locked group
+      if (objectToRemove?.groupId) {
+        const group = state.groups.find(g => g.id === objectToRemove.groupId);
+        if (group?.locked) return state;
+      }
+
       // Remove object from any group
       const updatedGroups = state.groups.map(group => ({
         ...group,
@@ -111,6 +128,11 @@ export const useSceneStore = create<SceneState>((set, get) => ({
 
   setSelectedObject: (object) => 
     set((state) => {
+      // Check if object can be selected (not locked)
+      if (object && !get().canSelectObject(object)) {
+        return state; // Don't change selection if object is locked
+      }
+
       // Auto-enable vertex mode for sphere, cylinder, and cone
       let newEditMode = state.editMode;
       if (object instanceof THREE.Mesh) {
@@ -147,6 +169,18 @@ export const useSceneStore = create<SceneState>((set, get) => ({
 
   toggleVisibility: (id) =>
     set((state) => {
+      const objectToToggle = state.objects.find(obj => obj.id === id);
+      if (!objectToToggle) return state;
+
+      // Check if object is locked
+      if (objectToToggle.locked) return state;
+
+      // Check if object is in a locked group
+      if (objectToToggle.groupId) {
+        const group = state.groups.find(g => g.id === objectToToggle.groupId);
+        if (group?.locked) return state;
+      }
+
       const updatedObjects = state.objects.map((obj) =>
         obj.id === id ? { ...obj, visible: !obj.visible } : obj
       );
@@ -163,18 +197,64 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       };
     }),
 
+  toggleLock: (id) =>
+    set((state) => {
+      const objectToToggle = state.objects.find(obj => obj.id === id);
+      if (!objectToToggle) return state;
+
+      // Check if object is in a locked group
+      if (objectToToggle.groupId) {
+        const group = state.groups.find(g => g.id === objectToToggle.groupId);
+        if (group?.locked) return state;
+      }
+
+      const updatedObjects = state.objects.map((obj) =>
+        obj.id === id ? { ...obj, locked: !obj.locked } : obj
+      );
+      
+      const toggledObject = updatedObjects.find((obj) => obj.id === id);
+      
+      // Clear selection if selected object becomes locked
+      const newSelectedObject = (toggledObject && toggledObject.locked && toggledObject.object === state.selectedObject)
+        ? null
+        : state.selectedObject;
+
+      return {
+        objects: updatedObjects,
+        selectedObject: newSelectedObject,
+      };
+    }),
+
   updateObjectName: (id, name) =>
-    set((state) => ({
-      objects: state.objects.map((obj) =>
-        obj.id === id ? { ...obj, name } : obj
-      ),
-    })),
+    set((state) => {
+      const objectToUpdate = state.objects.find(obj => obj.id === id);
+      if (!objectToUpdate) return state;
+
+      // Check if object is locked
+      if (objectToUpdate.locked) return state;
+
+      // Check if object is in a locked group
+      if (objectToUpdate.groupId) {
+        const group = state.groups.find(g => g.id === objectToUpdate.groupId);
+        if (group?.locked) return state;
+      }
+
+      return {
+        objects: state.objects.map((obj) =>
+          obj.id === id ? { ...obj, name } : obj
+        ),
+      };
+    }),
 
   updateObjectProperties: () => set((state) => ({ ...state })),
 
   updateObjectColor: (color) => 
     set((state) => {
       if (state.selectedObject instanceof THREE.Mesh) {
+        // Check if selected object is locked
+        const selectedObj = state.objects.find(obj => obj.object === state.selectedObject);
+        if (get().isObjectLocked(selectedObj?.id || '')) return state;
+
         const material = state.selectedObject.material as THREE.MeshStandardMaterial;
         material.color.setStyle(color);
         material.needsUpdate = true;
@@ -185,6 +265,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   updateObjectOpacity: (opacity) =>
     set((state) => {
       if (state.selectedObject instanceof THREE.Mesh) {
+        // Check if selected object is locked
+        const selectedObj = state.objects.find(obj => obj.object === state.selectedObject);
+        if (get().isObjectLocked(selectedObj?.id || '')) return state;
+
         const material = state.selectedObject.material as THREE.MeshStandardMaterial;
         material.transparent = opacity < 1;
         material.opacity = opacity;
@@ -204,6 +288,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   startVertexDrag: (index, position) =>
     set((state) => {
       if (!(state.selectedObject instanceof THREE.Mesh)) return state;
+
+      // Check if selected object is locked
+      const selectedObj = state.objects.find(obj => obj.object === state.selectedObject);
+      if (get().isObjectLocked(selectedObj?.id || '')) return state;
 
       const geometry = state.selectedObject.geometry;
       const positions = geometry.attributes.position;
@@ -242,6 +330,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     set((state) => {
       if (!state.draggedVertex || !(state.selectedObject instanceof THREE.Mesh)) return state;
 
+      // Check if selected object is locked
+      const selectedObj = state.objects.find(obj => obj.object === state.selectedObject);
+      if (get().isObjectLocked(selectedObj?.id || '')) return state;
+
       const geometry = state.selectedObject.geometry;
       const positions = geometry.attributes.position;
       
@@ -271,6 +363,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   startEdgeDrag: (vertexIndices, positions, midpoint) =>
     set((state) => {
       if (!(state.selectedObject instanceof THREE.Mesh)) return state;
+
+      // Check if selected object is locked
+      const selectedObj = state.objects.find(obj => obj.object === state.selectedObject);
+      if (get().isObjectLocked(selectedObj?.id || '')) return state;
 
       const geometry = state.selectedObject.geometry;
       const positionAttribute = geometry.attributes.position;
@@ -336,6 +432,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     set((state) => {
       if (!state.draggedEdge || !(state.selectedObject instanceof THREE.Mesh)) return state;
 
+      // Check if selected object is locked
+      const selectedObj = state.objects.find(obj => obj.object === state.selectedObject);
+      if (get().isObjectLocked(selectedObj?.id || '')) return state;
+
       const geometry = state.selectedObject.geometry;
       const positions = geometry.attributes.position;
       const offset = position.clone().sub(state.draggedEdge.midpoint);
@@ -373,6 +473,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         return state;
       }
 
+      // Check if selected object is locked
+      const selectedObj = state.objects.find(obj => obj.object === state.selectedObject);
+      if (get().isObjectLocked(selectedObj?.id || '')) return state;
+
       const oldGeometry = state.selectedObject.geometry;
       const newGeometry = new THREE.CylinderGeometry(
         oldGeometry.parameters.radiusTop,
@@ -404,6 +508,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
           !(state.selectedObject.geometry instanceof THREE.SphereGeometry)) {
         return state;
       }
+
+      // Check if selected object is locked
+      const selectedObj = state.objects.find(obj => obj.object === state.selectedObject);
+      if (get().isObjectLocked(selectedObj?.id || '')) return state;
 
       const oldGeometry = state.selectedObject.geometry;
       const newGeometry = new THREE.SphereGeometry(
@@ -437,6 +545,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         name,
         expanded: true,
         visible: true,
+        locked: false,
         objectIds: [...objectIds]
       };
 
@@ -455,6 +564,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
 
   removeGroup: (groupId) =>
     set((state) => {
+      const groupToRemove = state.groups.find(g => g.id === groupId);
+      if (groupToRemove?.locked) return state;
+
       // Remove group reference from objects
       const updatedObjects = state.objects.map(obj => 
         obj.groupId === groupId 
@@ -470,6 +582,12 @@ export const useSceneStore = create<SceneState>((set, get) => ({
 
   addObjectToGroup: (objectId, groupId) =>
     set((state) => {
+      const objectToMove = state.objects.find(obj => obj.id === objectId);
+      const targetGroup = state.groups.find(g => g.id === groupId);
+      
+      // Check if object is locked or target group is locked
+      if (objectToMove?.locked || targetGroup?.locked) return state;
+
       const updatedObjects = state.objects.map(obj =>
         obj.id === objectId ? { ...obj, groupId } : obj
       );
@@ -490,6 +608,11 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     set((state) => {
       const obj = state.objects.find(o => o.id === objectId);
       if (!obj?.groupId) return state;
+
+      const group = state.groups.find(g => g.id === obj.groupId);
+      
+      // Check if object is locked or group is locked
+      if (obj.locked || group?.locked) return state;
 
       const updatedObjects = state.objects.map(o =>
         o.id === objectId ? { ...o, groupId: undefined } : o
@@ -517,7 +640,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   toggleGroupVisibility: (groupId) =>
     set((state) => {
       const group = state.groups.find(g => g.id === groupId);
-      if (!group) return state;
+      if (!group || group.locked) return state;
 
       const newVisibility = !group.visible;
 
@@ -546,15 +669,58 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       };
     }),
 
+  toggleGroupLock: (groupId) =>
+    set((state) => {
+      const group = state.groups.find(g => g.id === groupId);
+      if (!group) return state;
+
+      const newLockState = !group.locked;
+
+      // Update group lock state
+      const updatedGroups = state.groups.map(g =>
+        g.id === groupId ? { ...g, locked: newLockState } : g
+      );
+
+      // Clear selection if selected object is in a group that becomes locked
+      const selectedObj = state.objects.find(obj => obj.object === state.selectedObject);
+      const newSelectedObject = (selectedObj && group.objectIds.includes(selectedObj.id) && newLockState)
+        ? null
+        : state.selectedObject;
+
+      return {
+        groups: updatedGroups,
+        selectedObject: newSelectedObject
+      };
+    }),
+
   updateGroupName: (groupId, name) =>
-    set((state) => ({
-      groups: state.groups.map(group =>
-        group.id === groupId ? { ...group, name } : group
-      )
-    })),
+    set((state) => {
+      const group = state.groups.find(g => g.id === groupId);
+      if (group?.locked) return state;
+
+      return {
+        groups: state.groups.map(group =>
+          group.id === groupId ? { ...group, name } : group
+        )
+      };
+    }),
 
   moveObjectsToGroup: (objectIds, groupId) =>
     set((state) => {
+      // Check if any objects are locked
+      const lockedObjects = objectIds.filter(id => {
+        const obj = state.objects.find(o => o.id === id);
+        return obj?.locked || (obj?.groupId && state.groups.find(g => g.id === obj.groupId)?.locked);
+      });
+
+      if (lockedObjects.length > 0) return state;
+
+      // Check if target group is locked
+      if (groupId) {
+        const targetGroup = state.groups.find(g => g.id === groupId);
+        if (targetGroup?.locked) return state;
+      }
+
       // Remove objects from their current groups
       const updatedGroups = state.groups.map(group => ({
         ...group,
@@ -582,4 +748,28 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         objects: updatedObjects
       };
     }),
+
+  // Helper functions
+  isObjectLocked: (objectId) => {
+    const state = get();
+    const obj = state.objects.find(o => o.id === objectId);
+    if (!obj) return false;
+
+    // Check if object itself is locked
+    if (obj.locked) return true;
+
+    // Check if object is in a locked group
+    if (obj.groupId) {
+      const group = state.groups.find(g => g.id === obj.groupId);
+      return group?.locked || false;
+    }
+
+    return false;
+  },
+
+  canSelectObject: (object) => {
+    const state = get();
+    const obj = state.objects.find(o => o.object === object);
+    return obj ? !get().isObjectLocked(obj.id) : true;
+  },
 }));
