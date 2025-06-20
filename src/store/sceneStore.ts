@@ -31,12 +31,6 @@ interface SceneState {
     midpoint: THREE.Vector3;
   } | null;
   isDraggingEdge: boolean;
-  isChangingVertexCoordinates: boolean;
-  pendingVertexChanges: {
-    indices: number[];
-    newPosition: THREE.Vector3;
-    originalPosition: THREE.Vector3;
-  } | null;
   addObject: (object: THREE.Object3D, name: string) => void;
   removeObject: (id: string) => void;
   setSelectedObject: (object: THREE.Object3D | null) => void;
@@ -57,9 +51,6 @@ interface SceneState {
   setIsDraggingEdge: (isDragging: boolean) => void;
   updateCylinderVertices: (vertexCount: number) => void;
   updateSphereVertices: (vertexCount: number) => void;
-  startVertexCoordinateChange: (newPosition: THREE.Vector3) => void;
-  applyVertexCoordinateChanges: () => void;
-  cancelVertexCoordinateChanges: () => void;
 }
 
 export const useSceneStore = create<SceneState>((set, get) => ({
@@ -75,8 +66,6 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   draggedVertex: null,
   draggedEdge: null,
   isDraggingEdge: false,
-  isChangingVertexCoordinates: false,
-  pendingVertexChanges: null,
 
   addObject: (object, name) =>
     set((state) => ({
@@ -107,9 +96,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       return { 
         selectedObject: object,
         editMode: newEditMode,
-        transformMode: null, // Clear transform mode when selecting object
-        isChangingVertexCoordinates: false,
-        pendingVertexChanges: null
+        transformMode: null // Clear transform mode when selecting object
       };
     }),
 
@@ -126,11 +113,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
           return state; // Don't change the edit mode
         }
       }
-      return { 
-        editMode: mode,
-        isChangingVertexCoordinates: false,
-        pendingVertexChanges: null
-      };
+      return { editMode: mode };
     }),
 
   toggleVisibility: (id) =>
@@ -222,9 +205,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         selectedElements: {
           ...state.selectedElements,
           vertices: overlappingIndices
-        },
-        isChangingVertexCoordinates: false,
-        pendingVertexChanges: null
+        }
       };
     }),
 
@@ -256,11 +237,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       };
     }),
 
-  endVertexDrag: () => set({ 
-    draggedVertex: null,
-    isChangingVertexCoordinates: false,
-    pendingVertexChanges: null
-  }),
+  endVertexDrag: () => set({ draggedVertex: null }),
 
   startEdgeDrag: (vertexIndices, positions, midpoint) =>
     set((state) => {
@@ -359,91 +336,6 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   endEdgeDrag: () => set({ draggedEdge: null }),
 
   setIsDraggingEdge: (isDragging) => set({ isDraggingEdge: isDragging }),
-
-  startVertexCoordinateChange: (newPosition) =>
-    set((state) => {
-      if (!state.draggedVertex || !(state.selectedObject instanceof THREE.Mesh)) return state;
-
-      // Store the original position if this is the first coordinate change
-      if (!state.isChangingVertexCoordinates) {
-        return {
-          isChangingVertexCoordinates: true,
-          pendingVertexChanges: {
-            indices: state.draggedVertex.indices,
-            newPosition: newPosition.clone(),
-            originalPosition: state.draggedVertex.initialPosition.clone()
-          }
-        };
-      } else {
-        // Update the pending changes
-        return {
-          pendingVertexChanges: state.pendingVertexChanges ? {
-            ...state.pendingVertexChanges,
-            newPosition: newPosition.clone()
-          } : null
-        };
-      }
-    }),
-
-  applyVertexCoordinateChanges: () =>
-    set((state) => {
-      if (!state.pendingVertexChanges || !(state.selectedObject instanceof THREE.Mesh)) return state;
-
-      const geometry = state.selectedObject.geometry;
-      const positions = geometry.attributes.position;
-      
-      // Apply the final position to all overlapping vertices
-      state.pendingVertexChanges.indices.forEach(index => {
-        positions.setXYZ(
-          index,
-          state.pendingVertexChanges!.newPosition.x,
-          state.pendingVertexChanges!.newPosition.y,
-          state.pendingVertexChanges!.newPosition.z
-        );
-      });
-
-      positions.needsUpdate = true;
-      geometry.computeVertexNormals();
-
-      // Update the draggedVertex position to match
-      const newDraggedVertex = state.draggedVertex ? {
-        ...state.draggedVertex,
-        position: state.pendingVertexChanges.newPosition.clone(),
-        initialPosition: state.pendingVertexChanges.newPosition.clone()
-      } : null;
-
-      return {
-        isChangingVertexCoordinates: false,
-        pendingVertexChanges: null,
-        draggedVertex: newDraggedVertex
-      };
-    }),
-
-  cancelVertexCoordinateChanges: () =>
-    set((state) => {
-      if (!state.pendingVertexChanges || !(state.selectedObject instanceof THREE.Mesh)) return state;
-
-      const geometry = state.selectedObject.geometry;
-      const positions = geometry.attributes.position;
-      
-      // Restore the original position
-      state.pendingVertexChanges.indices.forEach(index => {
-        positions.setXYZ(
-          index,
-          state.pendingVertexChanges!.originalPosition.x,
-          state.pendingVertexChanges!.originalPosition.y,
-          state.pendingVertexChanges!.originalPosition.z
-        );
-      });
-
-      positions.needsUpdate = true;
-      geometry.computeVertexNormals();
-
-      return {
-        isChangingVertexCoordinates: false,
-        pendingVertexChanges: null
-      };
-    }),
 
   updateCylinderVertices: (vertexCount) =>
     set((state) => {

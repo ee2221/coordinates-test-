@@ -5,39 +5,17 @@ import { useSceneStore } from '../store/sceneStore';
 import * as THREE from 'three';
 
 const VertexCoordinates = ({ position, onPositionChange }) => {
-  const { 
-    isChangingVertexCoordinates, 
-    pendingVertexChanges,
-    startVertexCoordinateChange,
-    applyVertexCoordinateChanges,
-    cancelVertexCoordinateChanges
-  } = useSceneStore();
-  
   const [localPosition, setLocalPosition] = useState({ x: 0, y: 0, z: 0 });
-  const [hasChanges, setHasChanges] = useState(false);
 
   useEffect(() => {
     if (position) {
-      const newPos = {
+      setLocalPosition({
         x: parseFloat(position.x.toFixed(3)),
         y: parseFloat(position.y.toFixed(3)),
         z: parseFloat(position.z.toFixed(3))
-      };
-      setLocalPosition(newPos);
-      setHasChanges(false);
-    }
-  }, [position]);
-
-  // Update local position when pending changes exist
-  useEffect(() => {
-    if (pendingVertexChanges) {
-      setLocalPosition({
-        x: parseFloat(pendingVertexChanges.newPosition.x.toFixed(3)),
-        y: parseFloat(pendingVertexChanges.newPosition.y.toFixed(3)),
-        z: parseFloat(pendingVertexChanges.newPosition.z.toFixed(3))
       });
     }
-  }, [pendingVertexChanges]);
+  }, [position]);
 
   if (!position) return null;
 
@@ -45,65 +23,26 @@ const VertexCoordinates = ({ position, onPositionChange }) => {
     const numValue = parseFloat(value) || 0;
     const newLocalPosition = { ...localPosition, [axis]: numValue };
     setLocalPosition(newLocalPosition);
-    setHasChanges(true);
     
     const newPosition = new THREE.Vector3(
       newLocalPosition.x,
       newLocalPosition.y,
       newLocalPosition.z
     );
-    
-    // Start coordinate change mode and update pending changes
-    startVertexCoordinateChange(newPosition);
     onPositionChange(newPosition);
-  };
-
-  const handleApply = () => {
-    applyVertexCoordinateChanges();
-    setHasChanges(false);
-  };
-
-  const handleCancel = () => {
-    cancelVertexCoordinateChanges();
-    setHasChanges(false);
-    // Reset local position to original
-    if (position) {
-      setLocalPosition({
-        x: parseFloat(position.x.toFixed(3)),
-        y: parseFloat(position.y.toFixed(3)),
-        z: parseFloat(position.z.toFixed(3))
-      });
-    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent, axis: 'x' | 'y' | 'z') => {
     if (e.key === 'Enter') {
       e.currentTarget.blur();
-      if (isChangingVertexCoordinates) {
-        handleApply();
-      }
-    } else if (e.key === 'Escape') {
-      e.currentTarget.blur();
-      if (isChangingVertexCoordinates) {
-        handleCancel();
-      }
     }
   };
 
   return (
     <div className="absolute right-4 bottom-4 bg-black/90 text-white p-4 rounded-lg font-mono border border-white/20">
-      <div className="mb-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium text-white/70">Vertex Position</h3>
-          {isChangingVertexCoordinates && (
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
-              <span className="text-xs text-yellow-400">Editing</span>
-            </div>
-          )}
-        </div>
+      <div className="mb-2">
+        <h3 className="text-sm font-medium text-white/70">Vertex Position</h3>
       </div>
-      
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <label className="w-8 text-sm font-medium">X:</label>
@@ -112,11 +51,7 @@ const VertexCoordinates = ({ position, onPositionChange }) => {
             value={localPosition.x}
             onChange={(e) => handleChange('x', e.target.value)}
             onKeyDown={(e) => handleKeyDown(e, 'x')}
-            className={`px-2 py-1 rounded w-24 text-right text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-              isChangingVertexCoordinates 
-                ? 'bg-yellow-900/50 border border-yellow-500/50 focus:bg-yellow-800/50' 
-                : 'bg-gray-800 focus:bg-gray-700'
-            }`}
+            className="bg-gray-800 px-2 py-1 rounded w-24 text-right text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-gray-700"
             step="0.1"
           />
         </div>
@@ -127,11 +62,7 @@ const VertexCoordinates = ({ position, onPositionChange }) => {
             value={localPosition.y}
             onChange={(e) => handleChange('y', e.target.value)}
             onKeyDown={(e) => handleKeyDown(e, 'y')}
-            className={`px-2 py-1 rounded w-24 text-right text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-              isChangingVertexCoordinates 
-                ? 'bg-yellow-900/50 border border-yellow-500/50 focus:bg-yellow-800/50' 
-                : 'bg-gray-800 focus:bg-gray-700'
-            }`}
+            className="bg-gray-800 px-2 py-1 rounded w-24 text-right text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-gray-700"
             step="0.1"
           />
         </div>
@@ -142,37 +73,11 @@ const VertexCoordinates = ({ position, onPositionChange }) => {
             value={localPosition.z}
             onChange={(e) => handleChange('z', e.target.value)}
             onKeyDown={(e) => handleKeyDown(e, 'z')}
-            className={`px-2 py-1 rounded w-24 text-right text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-              isChangingVertexCoordinates 
-                ? 'bg-yellow-900/50 border border-yellow-500/50 focus:bg-yellow-800/50' 
-                : 'bg-gray-800 focus:bg-gray-700'
-            }`}
+            className="bg-gray-800 px-2 py-1 rounded w-24 text-right text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-gray-700"
             step="0.1"
           />
         </div>
       </div>
-
-      {isChangingVertexCoordinates && (
-        <div className="mt-3 pt-3 border-t border-white/20">
-          <div className="flex gap-2">
-            <button
-              onClick={handleApply}
-              className="flex-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-xs font-medium transition-colors"
-            >
-              Apply
-            </button>
-            <button
-              onClick={handleCancel}
-              className="flex-1 px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded text-xs font-medium transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-          <div className="mt-2 text-xs text-white/60 text-center">
-            Press Enter to apply, Esc to cancel
-          </div>
-        </div>
-      )}
     </div>
   );
 };
@@ -510,28 +415,12 @@ const EditModeOverlay = () => {
 };
 
 const Scene: React.FC = () => {
-  const { 
-    objects, 
-    selectedObject, 
-    setSelectedObject, 
-    transformMode, 
-    editMode, 
-    draggedVertex, 
-    selectedElements, 
-    updateVertexDrag,
-    pendingVertexChanges,
-    isChangingVertexCoordinates
-  } = useSceneStore();
+  const { objects, selectedObject, setSelectedObject, transformMode, editMode, draggedVertex, selectedElements, updateVertexDrag } = useSceneStore();
   const [selectedPosition, setSelectedPosition] = useState<THREE.Vector3 | null>(null);
 
   useEffect(() => {
     if (editMode === 'vertex' && selectedObject instanceof THREE.Mesh) {
-      if (isChangingVertexCoordinates && pendingVertexChanges) {
-        // Show the pending position during coordinate editing
-        const worldPosition = pendingVertexChanges.newPosition.clone();
-        worldPosition.applyMatrix4(selectedObject.matrixWorld);
-        setSelectedPosition(worldPosition);
-      } else if (draggedVertex) {
+      if (draggedVertex) {
         setSelectedPosition(draggedVertex.position);
       } else if (selectedElements.vertices.length > 0) {
         const geometry = selectedObject.geometry;
@@ -550,7 +439,7 @@ const Scene: React.FC = () => {
     } else {
       setSelectedPosition(null);
     }
-  }, [editMode, selectedObject, draggedVertex, selectedElements.vertices, isChangingVertexCoordinates, pendingVertexChanges]);
+  }, [editMode, selectedObject, draggedVertex, selectedElements.vertices]);
 
   const handlePositionChange = (newPosition: THREE.Vector3) => {
     if (selectedObject instanceof THREE.Mesh && draggedVertex) {
