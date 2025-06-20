@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, TransformControls, Grid } from '@react-three/drei';
 import { useSceneStore } from '../store/sceneStore';
+import NavigationCube from './NavigationCube';
 import * as THREE from 'three';
 
 const VertexCoordinates = ({ position, onPositionChange }) => {
@@ -39,7 +40,7 @@ const VertexCoordinates = ({ position, onPositionChange }) => {
   };
 
   return (
-    <div className="absolute right-4 bottom-4 bg-black/90 text-white p-4 rounded-lg font-mono border border-white/20">
+    <div className="absolute right-4 bottom-32 bg-black/90 text-white p-4 rounded-lg font-mono border border-white/20">
       <div className="mb-2">
         <h3 className="text-sm font-medium text-white/70">Vertex Position</h3>
       </div>
@@ -117,7 +118,7 @@ const EdgeCoordinates = ({ position, onPositionChange }) => {
   };
 
   return (
-    <div className="absolute right-4 bottom-4 bg-black/90 text-white p-4 rounded-lg font-mono border border-white/20">
+    <div className="absolute right-4 bottom-32 bg-black/90 text-white p-4 rounded-lg font-mono border border-white/20">
       <div className="mb-2">
         <h3 className="text-sm font-medium text-white/70">Edge Midpoint</h3>
       </div>
@@ -520,6 +521,20 @@ const EditModeOverlay = () => {
   );
 };
 
+const CameraController = () => {
+  const { camera } = useThree();
+  const controlsRef = useRef();
+
+  useEffect(() => {
+    // Store reference to controls for external access
+    if (controlsRef.current) {
+      (window as any).orbitControls = controlsRef.current;
+    }
+  }, []);
+
+  return <OrbitControls ref={controlsRef} makeDefault />;
+};
+
 const Scene: React.FC = () => {
   const { 
     objects, 
@@ -593,6 +608,16 @@ const Scene: React.FC = () => {
     }
   };
 
+  const handleViewChange = (position: THREE.Vector3, target: THREE.Vector3) => {
+    const controls = (window as any).orbitControls;
+    if (controls) {
+      // Animate camera to new position
+      controls.object.position.copy(position);
+      controls.target.copy(target);
+      controls.update();
+    }
+  };
+
   return (
     <div className="relative w-full h-full">
       <Canvas
@@ -634,8 +659,12 @@ const Scene: React.FC = () => {
         )}
 
         <EditModeOverlay />
-        <OrbitControls makeDefault />
+        <CameraController />
       </Canvas>
+      
+      {/* Navigation Cube */}
+      <NavigationCube onViewChange={handleViewChange} />
+      
       {editMode === 'vertex' && selectedPosition && (
         <VertexCoordinates 
           position={selectedPosition}
