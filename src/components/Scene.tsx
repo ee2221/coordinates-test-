@@ -421,18 +421,21 @@ const Scene: React.FC = () => {
   useEffect(() => {
     if (editMode === 'vertex' && selectedObject instanceof THREE.Mesh) {
       if (draggedVertex) {
-        setSelectedPosition(draggedVertex.position);
+        // Show the world position of the dragged vertex
+        const worldPosition = draggedVertex.position.clone();
+        worldPosition.applyMatrix4(selectedObject.matrixWorld);
+        setSelectedPosition(worldPosition);
       } else if (selectedElements.vertices.length > 0) {
         const geometry = selectedObject.geometry;
         const positions = geometry.attributes.position;
         const vertexIndex = selectedElements.vertices[0];
-        const position = new THREE.Vector3(
+        const localPosition = new THREE.Vector3(
           positions.getX(vertexIndex),
           positions.getY(vertexIndex),
           positions.getZ(vertexIndex)
         );
-        position.applyMatrix4(selectedObject.matrixWorld);
-        setSelectedPosition(position);
+        const worldPosition = localPosition.applyMatrix4(selectedObject.matrixWorld);
+        setSelectedPosition(worldPosition);
       } else {
         setSelectedPosition(null);
       }
@@ -441,17 +444,32 @@ const Scene: React.FC = () => {
     }
   }, [editMode, selectedObject, draggedVertex, selectedElements.vertices]);
 
-  const handlePositionChange = (newPosition: THREE.Vector3) => {
+  const handlePositionChange = (newWorldPosition: THREE.Vector3) => {
     if (selectedObject instanceof THREE.Mesh && draggedVertex) {
-      // Convert world position back to local position
-      const localPosition = newPosition.clone();
+      // Convert world position to local position for the geometry
+      const localPosition = newWorldPosition.clone();
       const inverseMatrix = selectedObject.matrixWorld.clone().invert();
       localPosition.applyMatrix4(inverseMatrix);
       
-      updateVertexDrag(localPosition);
+      // Update the geometry with the local position
+      const geometry = selectedObject.geometry;
+      const positions = geometry.attributes.position;
+      
+      draggedVertex.indices.forEach(index => {
+        positions.setXYZ(index, localPosition.x, localPosition.y, localPosition.z);
+      });
+      
+      positions.needsUpdate = true;
+      geometry.computeVertexNormals();
+      
+      // Update the dragged vertex position to the local position
+      useSceneStore.getState().draggedVertex = {
+        ...draggedVertex,
+        position: localPosition.clone()
+      };
       
       // Update the displayed position to match the world position
-      setSelectedPosition(newPosition);
+      setSelectedPosition(newWorldPosition);
     }
   };
 

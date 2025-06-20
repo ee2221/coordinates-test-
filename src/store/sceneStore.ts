@@ -172,26 +172,27 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       },
     })),
 
-  startVertexDrag: (index, position) =>
+  startVertexDrag: (index, worldPosition) =>
     set((state) => {
       if (!(state.selectedObject instanceof THREE.Mesh)) return state;
 
       const geometry = state.selectedObject.geometry;
       const positions = geometry.attributes.position;
       const overlappingIndices = [];
-      const selectedPos = new THREE.Vector3(
-        positions.getX(index),
-        positions.getY(index),
-        positions.getZ(index)
-      );
+      
+      // Convert world position to local position for comparison
+      const localPosition = worldPosition.clone();
+      const inverseMatrix = state.selectedObject.matrixWorld.clone().invert();
+      localPosition.applyMatrix4(inverseMatrix);
 
+      // Find all vertices at the same local position
       for (let i = 0; i < positions.count; i++) {
         const pos = new THREE.Vector3(
           positions.getX(i),
           positions.getY(i),
           positions.getZ(i)
         );
-        if (pos.distanceTo(selectedPos) < 0.0001) {
+        if (pos.distanceTo(localPosition) < 0.0001) {
           overlappingIndices.push(i);
         }
       }
@@ -199,8 +200,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       return {
         draggedVertex: {
           indices: overlappingIndices,
-          position: position.clone(),
-          initialPosition: position.clone()
+          position: localPosition.clone(), // Store as local position
+          initialPosition: localPosition.clone()
         },
         selectedElements: {
           ...state.selectedElements,
@@ -209,20 +210,20 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       };
     }),
 
-  updateVertexDrag: (position) =>
+  updateVertexDrag: (localPosition) =>
     set((state) => {
       if (!state.draggedVertex || !(state.selectedObject instanceof THREE.Mesh)) return state;
 
       const geometry = state.selectedObject.geometry;
       const positions = geometry.attributes.position;
       
-      // Update all overlapping vertices to the new position
+      // Update all overlapping vertices to the new local position
       state.draggedVertex.indices.forEach(index => {
         positions.setXYZ(
           index,
-          position.x,
-          position.y,
-          position.z
+          localPosition.x,
+          localPosition.y,
+          localPosition.z
         );
       });
 
@@ -232,7 +233,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       return {
         draggedVertex: {
           ...state.draggedVertex,
-          position: position.clone()
+          position: localPosition.clone()
         }
       };
     }),
