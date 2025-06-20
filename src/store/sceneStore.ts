@@ -3,13 +3,23 @@ import * as THREE from 'three';
 
 type EditMode = 'vertex' | 'edge' | null;
 
+interface Group {
+  id: string;
+  name: string;
+  expanded: boolean;
+  visible: boolean;
+  objectIds: string[];
+}
+
 interface SceneState {
   objects: Array<{
     id: string;
     object: THREE.Object3D;
     name: string;
     visible: boolean;
+    groupId?: string;
   }>;
+  groups: Group[];
   selectedObject: THREE.Object3D | null;
   transformMode: 'translate' | 'rotate' | 'scale' | null;
   editMode: EditMode;
@@ -51,10 +61,20 @@ interface SceneState {
   setIsDraggingEdge: (isDragging: boolean) => void;
   updateCylinderVertices: (vertexCount: number) => void;
   updateSphereVertices: (vertexCount: number) => void;
+  // Group management
+  createGroup: (name: string, objectIds?: string[]) => void;
+  removeGroup: (groupId: string) => void;
+  addObjectToGroup: (objectId: string, groupId: string) => void;
+  removeObjectFromGroup: (objectId: string) => void;
+  toggleGroupExpanded: (groupId: string) => void;
+  toggleGroupVisibility: (groupId: string) => void;
+  updateGroupName: (groupId: string, name: string) => void;
+  moveObjectsToGroup: (objectIds: string[], groupId: string | null) => void;
 }
 
 export const useSceneStore = create<SceneState>((set, get) => ({
   objects: [],
+  groups: [],
   selectedObject: null,
   transformMode: null,
   editMode: null,
@@ -73,12 +93,21 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     })),
 
   removeObject: (id) =>
-    set((state) => ({
-      objects: state.objects.filter((obj) => obj.id !== id),
-      selectedObject: state.objects.find((obj) => obj.id === id)?.object === state.selectedObject
-        ? null
-        : state.selectedObject,
-    })),
+    set((state) => {
+      // Remove object from any group
+      const updatedGroups = state.groups.map(group => ({
+        ...group,
+        objectIds: group.objectIds.filter(objId => objId !== id)
+      }));
+
+      return {
+        objects: state.objects.filter((obj) => obj.id !== id),
+        groups: updatedGroups,
+        selectedObject: state.objects.find((obj) => obj.id === id)?.object === state.selectedObject
+          ? null
+          : state.selectedObject,
+      };
+    }),
 
   setSelectedObject: (object) => 
     set((state) => {
@@ -397,6 +426,160 @@ export const useSceneStore = create<SceneState>((set, get) => ({
           edges: [],
           faces: []
         }
+      };
+    }),
+
+  // Group management functions
+  createGroup: (name, objectIds = []) =>
+    set((state) => {
+      const newGroup: Group = {
+        id: crypto.randomUUID(),
+        name,
+        expanded: true,
+        visible: true,
+        objectIds: [...objectIds]
+      };
+
+      // Update objects to be part of this group
+      const updatedObjects = state.objects.map(obj => 
+        objectIds.includes(obj.id) 
+          ? { ...obj, groupId: newGroup.id }
+          : obj
+      );
+
+      return {
+        groups: [...state.groups, newGroup],
+        objects: updatedObjects
+      };
+    }),
+
+  removeGroup: (groupId) =>
+    set((state) => {
+      // Remove group reference from objects
+      const updatedObjects = state.objects.map(obj => 
+        obj.groupId === groupId 
+          ? { ...obj, groupId: undefined }
+          : obj
+      );
+
+      return {
+        groups: state.groups.filter(group => group.id !== groupId),
+        objects: updatedObjects
+      };
+    }),
+
+  addObjectToGroup: (objectId, groupId) =>
+    set((state) => {
+      const updatedObjects = state.objects.map(obj =>
+        obj.id === objectId ? { ...obj, groupId } : obj
+      );
+
+      const updatedGroups = state.groups.map(group =>
+        group.id === groupId 
+          ? { ...group, objectIds: [...group.objectIds, objectId] }
+          : group
+      );
+
+      return {
+        objects: updatedObjects,
+        groups: updatedGroups
+      };
+    }),
+
+  removeObjectFromGroup: (objectId) =>
+    set((state) => {
+      const obj = state.objects.find(o => o.id === objectId);
+      if (!obj?.groupId) return state;
+
+      const updatedObjects = state.objects.map(o =>
+        o.id === objectId ? { ...o, groupId: undefined } : o
+      );
+
+      const updatedGroups = state.groups.map(group =>
+        group.id === obj.groupId
+          ? { ...group, objectIds: group.objectIds.filter(id => id !== objectId) }
+          : group
+      );
+
+      return {
+        objects: updatedObjects,
+        groups: updatedGroups
+      };
+    }),
+
+  toggleGroupExpanded: (groupId) =>
+    set((state) => ({
+      groups: state.groups.map(group =>
+        group.id === groupId ? { ...group, expanded: !group.expanded } : group
+      )
+    })),
+
+  toggleGroupVisibility: (groupId) =>
+    set((state) => {
+      const group = state.groups.find(g => g.id === groupId);
+      if (!group) return state;
+
+      const newVisibility = !group.visible;
+
+      // Update group visibility
+      const updatedGroups = state.groups.map(g =>
+        g.id === groupId ? { ...g, visible: newVisibility } : g
+      );
+
+      // Update all objects in the group
+      const updatedObjects = state.objects.map(obj =>
+        group.objectIds.includes(obj.id) 
+          ? { ...obj, visible: newVisibility }
+          : obj
+      );
+
+      // Clear selection if selected object becomes invisible
+      const selectedObj = state.objects.find(obj => obj.object === state.selectedObject);
+      const newSelectedObject = (selectedObj && group.objectIds.includes(selectedObj.id) && !newVisibility)
+        ? null
+        : state.selectedObject;
+
+      return {
+        groups: updatedGroups,
+        objects: updatedObjects,
+        selectedObject: newSelectedObject
+      };
+    }),
+
+  updateGroupName: (groupId, name) =>
+    set((state) => ({
+      groups: state.groups.map(group =>
+        group.id === groupId ? { ...group, name } : group
+      )
+    })),
+
+  moveObjectsToGroup: (objectIds, groupId) =>
+    set((state) => {
+      // Remove objects from their current groups
+      const updatedGroups = state.groups.map(group => ({
+        ...group,
+        objectIds: group.objectIds.filter(id => !objectIds.includes(id))
+      }));
+
+      // Add objects to the new group if specified
+      const finalGroups = groupId 
+        ? updatedGroups.map(group =>
+            group.id === groupId
+              ? { ...group, objectIds: [...group.objectIds, ...objectIds] }
+              : group
+          )
+        : updatedGroups;
+
+      // Update objects
+      const updatedObjects = state.objects.map(obj =>
+        objectIds.includes(obj.id) 
+          ? { ...obj, groupId }
+          : obj
+      );
+
+      return {
+        groups: finalGroups,
+        objects: updatedObjects
       };
     }),
 }));
