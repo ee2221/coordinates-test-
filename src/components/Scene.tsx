@@ -256,15 +256,21 @@ const VertexPoints = ({ geometry, object }) => {
 };
 
 const EdgeLines = ({ geometry, object }) => {
-  const { editMode, draggedEdge, startEdgeDrag, isDraggingEdge, setIsDraggingEdge, endEdgeDrag } = useSceneStore();
+  const { 
+    editMode, 
+    draggedEdge, 
+    startEdgeDrag, 
+    isDraggingEdge, 
+    setIsDraggingEdge, 
+    endEdgeDrag,
+    selectedElements 
+  } = useSceneStore();
   const { camera, raycaster, pointer } = useThree();
   const positions = geometry.attributes.position;
   const edges = [];
   const worldMatrix = object.matrixWorld;
   const plane = useRef(new THREE.Plane());
   const intersection = useRef(new THREE.Vector3());
-  const [clickCount, setClickCount] = useState(0);
-  const [clickTimer, setClickTimer] = useState<NodeJS.Timeout | null>(null);
 
   // Get all edges including vertical ones
   const indices = geometry.index ? Array.from(geometry.index.array) : null;
@@ -366,24 +372,16 @@ const EdgeLines = ({ geometry, object }) => {
   }, [isDraggingEdge, draggedEdge, camera, raycaster, pointer, setIsDraggingEdge, endEdgeDrag]);
 
   const handleEdgeClick = (vertices: [number, number], positions: [THREE.Vector3, THREE.Vector3], midpoint: THREE.Vector3) => {
-    if (isDraggingEdge) return;
+    // Single click to select and show coordinates
+    startEdgeDrag(vertices, positions, midpoint);
+  };
 
-    setClickCount(prev => prev + 1);
-
-    if (clickTimer) {
-      clearTimeout(clickTimer);
+  const handleEdgeDoubleClick = (vertices: [number, number], positions: [THREE.Vector3, THREE.Vector3], midpoint: THREE.Vector3) => {
+    // Double click to start dragging
+    if (!isDraggingEdge) {
+      setIsDraggingEdge(true);
+      startEdgeDrag(vertices, positions, midpoint);
     }
-
-    const timer = setTimeout(() => {
-      if (clickCount + 1 >= 2) {
-        // Double click detected - start dragging
-        setIsDraggingEdge(true);
-        startEdgeDrag(vertices, positions, midpoint);
-      }
-      setClickCount(0);
-    }, 300);
-
-    setClickTimer(timer);
   };
 
   return editMode === 'edge' ? (
@@ -400,21 +398,25 @@ const EdgeLines = ({ geometry, object }) => {
             <line geometry={geometry}>
               <lineBasicMaterial
                 color={isSelected ? 'red' : 'yellow'}
-                linewidth={2}
+                linewidth={isSelected ? 3 : 2}
               />
             </line>
             <mesh
               position={midpoint}
-              onPointerDown={(e) => {
+              onClick={(e) => {
                 e.stopPropagation();
                 handleEdgeClick([v1, v2], [p1, p2], midpoint);
+              }}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                handleEdgeDoubleClick([v1, v2], [p1, p2], midpoint);
               }}
             >
               <sphereGeometry args={[0.08]} />
               <meshBasicMaterial
                 color={isSelected ? 'red' : 'yellow'}
                 transparent
-                opacity={0.7}
+                opacity={isSelected ? 0.9 : 0.7}
               />
             </mesh>
           </group>
