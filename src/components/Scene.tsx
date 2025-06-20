@@ -68,7 +68,7 @@ const VertexCoordinates = ({ position, onPositionChange }) => {
           />
         </div>
         <div className="flex items-center gap-2">
-          <label className="w-8 text-sm font-medium">Y:</label>
+          <label className="w-8 text-sm font-medium">Z:</label>
           <input
             type="number"
             value={localPosition.z}
@@ -641,6 +641,7 @@ const Scene: React.FC = () => {
 
   return (
     <div className="relative w-full h-full">
+      {/* Camera Cube positioned at top center */}
       <CameraCube onViewChange={handleViewChange} />
       
       <Canvas
