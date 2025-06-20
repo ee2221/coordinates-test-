@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, TransformControls, Grid } from '@react-three/drei';
 import { useSceneStore } from '../store/sceneStore';
+import CameraCube from './CameraCube';
 import * as THREE from 'three';
 
 const VertexCoordinates = ({ position, onPositionChange }) => {
@@ -67,7 +68,7 @@ const VertexCoordinates = ({ position, onPositionChange }) => {
           />
         </div>
         <div className="flex items-center gap-2">
-          <label className="w-8 text-sm font-medium">Z:</label>
+          <label className="w-8 text-sm font-medium">Y:</label>
           <input
             type="number"
             value={localPosition.z}
@@ -204,7 +205,7 @@ const VertexCountSelector = () => {
   }
 
   return (
-    <div className="absolute left-1/2 top-4 -translate-x-1/2 bg-black/75 text-white p-4 rounded-lg">
+    <div className="absolute left-1/2 top-32 -translate-x-1/2 bg-black/75 text-white p-4 rounded-lg">
       <div className="flex items-center gap-2">
         <label className="text-sm font-medium">Vertex Count:</label>
         <select
@@ -520,6 +521,16 @@ const EditModeOverlay = () => {
   );
 };
 
+const CameraController = ({ cameraRef }: { cameraRef: React.MutableRefObject<any> }) => {
+  const { camera } = useThree();
+  
+  useEffect(() => {
+    cameraRef.current = camera;
+  }, [camera, cameraRef]);
+
+  return null;
+};
+
 const Scene: React.FC = () => {
   const { 
     objects, 
@@ -536,6 +547,8 @@ const Scene: React.FC = () => {
   } = useSceneStore();
   const [selectedPosition, setSelectedPosition] = useState<THREE.Vector3 | null>(null);
   const [selectedEdgePosition, setSelectedEdgePosition] = useState<THREE.Vector3 | null>(null);
+  const cameraRef = useRef<any>(null);
+  const controlsRef = useRef<any>(null);
 
   useEffect(() => {
     if (editMode === 'vertex' && selectedObject instanceof THREE.Mesh) {
@@ -593,13 +606,50 @@ const Scene: React.FC = () => {
     }
   };
 
+  const handleViewChange = (position: THREE.Vector3, target: THREE.Vector3) => {
+    if (cameraRef.current && controlsRef.current) {
+      // Animate camera to new position
+      const startPosition = cameraRef.current.position.clone();
+      const startTarget = controlsRef.current.target.clone();
+      
+      let progress = 0;
+      const duration = 1000; // 1 second
+      const startTime = Date.now();
+      
+      const animate = () => {
+        const elapsed = Date.now() - startTime;
+        progress = Math.min(elapsed / duration, 1);
+        
+        // Smooth easing function
+        const easeProgress = 1 - Math.pow(1 - progress, 3);
+        
+        // Interpolate camera position
+        cameraRef.current.position.lerpVectors(startPosition, position, easeProgress);
+        
+        // Interpolate target
+        controlsRef.current.target.lerpVectors(startTarget, target, easeProgress);
+        controlsRef.current.update();
+        
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        }
+      };
+      
+      animate();
+    }
+  };
+
   return (
     <div className="relative w-full h-full">
+      <CameraCube onViewChange={handleViewChange} />
+      
       <Canvas
         camera={{ position: [5, 5, 5], fov: 75 }}
         className="w-full h-full bg-gray-900"
         onContextMenu={(e) => e.preventDefault()} // Prevent default right-click menu
       >
+        <CameraController cameraRef={cameraRef} />
+        
         <ambientLight intensity={0.5} />
         <directionalLight position={[10, 10, 5]} intensity={1} />
         
@@ -634,7 +684,7 @@ const Scene: React.FC = () => {
         )}
 
         <EditModeOverlay />
-        <OrbitControls makeDefault />
+        <OrbitControls ref={controlsRef} makeDefault />
       </Canvas>
       {editMode === 'vertex' && selectedPosition && (
         <VertexCoordinates 
