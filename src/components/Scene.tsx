@@ -537,14 +537,6 @@ const CameraController = () => {
         camera.position.set(0, 0, distance);
         camera.lookAt(0, 0, 0);
         camera.up.set(0, 1, 0);
-        if (camera instanceof THREE.PerspectiveCamera) {
-          // Switch to orthographic for technical views
-          const orthoCamera = new THREE.OrthographicCamera(
-            -distance, distance, distance, -distance, 0.1, 1000
-          );
-          orthoCamera.position.copy(camera.position);
-          orthoCamera.lookAt(0, 0, 0);
-        }
         break;
       case 'back':
         camera.position.set(0, 0, -distance);
@@ -632,7 +624,7 @@ const CameraController = () => {
       makeDefault
       enablePan={true}
       enableZoom={true}
-      enableRotate={cameraPerspective === 'perspective'}
+      enableRotate={true}
     />
   );
 };
